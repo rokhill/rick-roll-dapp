@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rick Roll DApp</title>
+    <!-- 
+        This is the link to Tailwind CSS, which we use for styling. 
+        It provides pre-made classes like "bg-lc-dark" and "p-8" to make the app look good without writing custom CSS. 
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // We are customizing the colors to match the Lightchain AI brand.
+        // This makes "lc-dark" and "lc-accent" available to use in our HTML classes.
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'lc-dark': '#1a1a1a', // A dark gray for the background
+                        'lc-accent': '#00FFFF', // A vibrant cyan for highlights
+                        'lc-light-gray': '#cccccc', // A light gray for text
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        /* This line imports a nice, modern font called 'Inter' from Google Fonts. */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* This is a simple animation for the loading spinner. */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #00FFFF;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-lc-dark text-lc-light-gray min-h-screen flex items-center justify-center p-4">
+
+    <!-- This is the main card that holds all the content. -->
+    <div class="bg-gray-800 p-8 rounded-xl shadow-2xl max-w-lg w-full text-center border border-gray-700">
+        <h1 class="text-3xl font-bold mb-2 text-lc-accent">Rick Roll DApp</h1>
+        <p class="mb-6 text-gray-400">A simple dApp for a memorable interaction!</p>
+
+        <!-- This section displays the interaction counter. -->
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-200">Interactions</h2>
+            <!-- The ID "interactionCount" lets our JavaScript easily find and update this number. -->
+            <p id="interactionCount" class="text-4xl font-bold text-lc-accent mt-2 animate-pulse">0</p>
+        </div>
+
+        <!-- This is the button the user will click. -->
+        <button id="interactButton" class="bg-lc-accent hover:bg-opacity-90 text-gray-900 font-bold py-3 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-lc-accent focus:ring-opacity-50">
+            Interact
+        </button>
+
+        <!-- This is a loading indicator that will show when a transaction is pending. It's hidden by default. -->
+        <div id="loading" class="mt-6 flex items-center justify-center space-x-2 hidden">
+            <div class="spinner"></div>
+            <p class="text-gray-400">Waiting for transaction...</p>
+        </div>
+
+        <!-- This container holds the Rick Roll GIF. It is also hidden by default. -->
+        <div id="gifContainer" class="mt-8 hidden overflow-hidden rounded-lg">
+            <!-- This is the URL for the gif. We'll show this when the button is clicked. -->
+            <img src="https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExZGcwem8zM2ZlcmZ1MWxweG9mZWRsZmFicnNocWgyc256dDczdmJjZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/g7QTevVU0W4hpr9o8o/giphy.gif" alt="Rick Roll GIF" class="w-full h-auto object-cover">
+        </div>
+
+        <!-- New: This container holds the protected message. It's hidden by default. -->
+        <div id="protectedMessage" class="mt-8 hidden bg-blue-800 border border-blue-700 text-blue-200 p-4 rounded-lg shadow-inner">
+            <p class="text-lg font-semibold">Protected from the Rick Roll! 🎉</p>
+            <p class="mt-2 text-sm">The interaction count has reached a special threshold, so you are safe... for now.</p>
+        </div>
+
+        <!-- A custom message box for errors or success messages. It replaces the default browser "alert" function. -->
+        <div id="messageBox" class="mt-6 hidden bg-red-800 border border-red-700 text-red-200 p-4 rounded-lg shadow-inner">
+            <p id="messageText"></p>
+        </div>
+
+        <!-- The creator label you requested. -->
+        <p class="mt-8 text-sm text-gray-500">Created by <span class="font-semibold text-gray-400">Llihkor Productions</span></p>
+    </div>
+
+    <!-- The JavaScript section handles all the logic and interactivity. -->
+    <script>
+        // This is where a real dApp would connect to a wallet. We're using a fake ID for this demo.
+        const walletId = `0x${Math.random().toString(16).slice(2, 42)}`;
+        
+        // This is a placeholder for a real blockchain contract's ABI (Application Binary Interface).
+        // It tells the front end what functions exist in the contract.
+        const contractABI = [
+            {
+                "inputs": [],
+                "name": "interact",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "interactionCount",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ];
+        
+        // We're creating a simple in-memory object to simulate the contract's behavior.
+        // In a real dApp, these functions would make calls to the blockchain.
+        let mockContractState = {
+            _count: 0,
+            interact: () => {
+                mockContractState._count++;
+                return true;
+            },
+            interactionCount: () => {
+                return mockContractState._count;
+            }
+        };
+
+        // We get references to the HTML elements so we can manipulate them with JavaScript.
+        const interactButton = document.getElementById('interactButton');
+        const interactionCountElement = document.getElementById('interactionCount');
+        const loadingIndicator = document.getElementById('loading');
+        const gifContainer = document.getElementById('gifContainer');
+        const protectedMessage = document.getElementById('protectedMessage');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+        // This is the number of interactions that triggers the "protection" feature.
+        const protectionThreshold = 5;
+
+        // This function shows messages to the user in our custom box.
+        const showMessage = (text, isError = false) => {
+            messageText.textContent = text;
+            messageBox.classList.remove('hidden');
+            if (isError) {
+                // If it's an error, we style the box with a red theme.
+                messageBox.classList.remove('bg-green-800', 'border-green-700', 'text-green-200');
+                messageBox.classList.add('bg-red-800', 'border-red-700', 'text-red-200');
+            } else {
+                // Otherwise, we use a green theme for success.
+                messageBox.classList.remove('bg-red-800', 'border-red-700', 'text-red-200');
+                messageBox.classList.add('bg-green-800', 'border-green-700', 'text-green-200');
+            }
+        };
+
+        // This function hides the message box.
+        const hideMessage = () => {
+            messageBox.classList.add('hidden');
+        };
+
+        // This function updates the counter number on the screen.
+        const updateCounter = async () => {
+            try {
+                // We call our mock contract to get the latest count.
+                const count = mockContractState.interactionCount();
+                interactionCountElement.textContent = count;
+            } catch (error) {
+                console.error("Failed to fetch interaction count:", error);
+                showMessage("Failed to fetch interaction count.", true);
+            }
+        };
+
+        // This is the main function that runs when the button is clicked.
+        interactButton.addEventListener('click', async () => {
+            // First, we hide any previous messages and disable the button.
+            hideMessage();
+            interactButton.disabled = true;
+            
+            // Then, we show the loading spinner and hide the message containers.
+            loadingIndicator.classList.remove('hidden');
+            gifContainer.classList.add('hidden');
+            protectedMessage.classList.add('hidden');
+
+            try {
+                // We simulate a blockchain transaction by waiting for a couple of seconds.
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // We call the 'interact' function in our mock contract.
+                mockContractState.interact();
+
+                // Once the transaction is "done", we update the counter.
+                await updateCounter();
+
+                // We add new logic to check if the protection threshold has been met.
+                const currentCount = mockContractState.interactionCount();
+                if (currentCount >= protectionThreshold) {
+                    // Show the protected message instead of the GIF
+                    protectedMessage.classList.remove('hidden');
+                } else {
+                    // Show the GIF as normal
+                    gifContainer.classList.remove('hidden');
+                }
+
+                // The message stays for a few seconds.
+                setTimeout(() => {
+                    gifContainer.classList.add('hidden');
+                    protectedMessage.classList.add('hidden');
+                }, 3000); // Messages stay for 3 seconds
+
+            } catch (error) {
+                // If something goes wrong, we'll display an error message.
+                console.error("Transaction failed:", error);
+                showMessage("Transaction failed. Please try again.", true);
+            } finally {
+                // Whether it succeeds or fails, we hide the loading spinner and re-enable the button.
+                loadingIndicator.classList.add('hidden');
+                interactButton.disabled = false;
+            }
+        });
+
+        // This makes sure the counter shows the initial value when the page first loads.
+        window.addEventListener('load', updateCounter);
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rick Roll DApp</title>
+    <!-- 
+        This is the link to Tailwind CSS, which we use for styling. 
+        It provides pre-made classes like "bg-lc-dark" and "p-8" to make the app look good without writing custom CSS. 
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // We are customizing the colors to match the Lightchain AI brand.
+        // This makes "lc-dark" and "lc-accent" available to use in our HTML classes.
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'lc-dark': '#1a1a1a', // A dark gray for the background
+                        'lc-accent': '#00FFFF', // A vibrant cyan for highlights
+                        'lc-light-gray': '#cccccc', // A light gray for text
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        /* This line imports a nice, modern font called 'Inter' from Google Fonts. */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* This is a simple animation for the loading spinner. */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #00FFFF;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-lc-dark text-lc-light-gray min-h-screen flex items-center justify-center p-4">
+
+    <!-- This is the main card that holds all the content. -->
+    <div class="bg-gray-800 p-8 rounded-xl shadow-2xl max-w-lg w-full text-center border border-gray-700">
+        <h1 class="text-3xl font-bold mb-2 text-lc-accent">Rick Roll DApp</h1>
+        <p class="mb-6 text-gray-400">A simple dApp for a memorable interaction!</p>
+
+        <!-- This section displays the interaction counter. -->
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-200">Interactions</h2>
+            <!-- The ID "interactionCount" lets our JavaScript easily find and update this number. -->
+            <p id="interactionCount" class="text-4xl font-bold text-lc-accent mt-2 animate-pulse">0</p>
+        </div>
+
+        <!-- This is the button the user will click. -->
+        <button id="interactButton" class="bg-lc-accent hover:bg-opacity-90 text-gray-900 font-bold py-3 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-lc-accent focus:ring-opacity-50">
+            Interact
+        </button>
+
+        <!-- This is a loading indicator that will show when a transaction is pending. It's hidden by default. -->
+        <div id="loading" class="mt-6 flex items-center justify-center space-x-2 hidden">
+            <div class="spinner"></div>
+            <p class="text-gray-400">Waiting for transaction...</p>
+        </div>
+
+        <!-- This container holds the Rick Roll GIF. It is also hidden by default. -->
+        <div id="gifContainer" class="mt-8 hidden overflow-hidden rounded-lg">
+            <!-- This is the URL for the gif. We'll show this when the button is clicked. -->
+            <img src="https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExZGcwem8zM2ZlcmZ1MWxweG9mZWRsZmFicnNocWgyc256dDczdmJjZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/g7QTevVU0W4hpr9o8o/giphy.gif" alt="Rick Roll GIF" class="w-full h-auto object-cover">
+        </div>
+
+        <!-- New: This container holds the protected message. It's hidden by default. -->
+        <div id="protectedMessage" class="mt-8 hidden bg-blue-800 border border-blue-700 text-blue-200 p-4 rounded-lg shadow-inner">
+            <p class="text-lg font-semibold">Protected from the Rick Roll! 🎉</p>
+            <p class="mt-2 text-sm">The interaction count has reached a special threshold, so you are safe... for now.</p>
+        </div>
+
+        <!-- A custom message box for errors or success messages. It replaces the default browser "alert" function. -->
+        <div id="messageBox" class="mt-6 hidden bg-red-800 border border-red-700 text-red-200 p-4 rounded-lg shadow-inner">
+            <p id="messageText"></p>
+        </div>
+
+        <!-- The creator label you requested. -->
+        <p class="mt-8 text-sm text-gray-500">Created by <span class="font-semibold text-gray-400">Llihkor Productions</span></p>
+    </div>
+
+    <!-- The JavaScript section handles all the logic and interactivity. -->
+    <script>
+        // This is where a real dApp would connect to a wallet. We're using a fake ID for this demo.
+        const walletId = `0x${Math.random().toString(16).slice(2, 42)}`;
+        
+        // This is a placeholder for a real blockchain contract's ABI (Application Binary Interface).
+        // It tells the front end what functions exist in the contract.
+        const contractABI = [
+            {
+                "inputs": [],
+                "name": "interact",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "interactionCount",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ];
+        
+        // We're creating a simple in-memory object to simulate the contract's behavior.
+        // In a real dApp, these functions would make calls to the blockchain.
+        let mockContractState = {
+            _count: 0,
+            interact: () => {
+                mockContractState._count++;
+                return true;
+            },
+            interactionCount: () => {
+                return mockContractState._count;
+            }
+        };
+
+        // We get references to the HTML elements so we can manipulate them with JavaScript.
+        const interactButton = document.getElementById('interactButton');
+        const interactionCountElement = document.getElementById('interactionCount');
+        const loadingIndicator = document.getElementById('loading');
+        const gifContainer = document.getElementById('gifContainer');
+        const protectedMessage = document.getElementById('protectedMessage');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+        // This is the number of interactions that triggers the "protection" feature.
+        const protectionThreshold = 5;
+
+        // This function shows messages to the user in our custom box.
+        const showMessage = (text, isError = false) => {
+            messageText.textContent = text;
+            messageBox.classList.remove('hidden');
+            if (isError) {
+                // If it's an error, we style the box with a red theme.
+                messageBox.classList.remove('bg-green-800', 'border-green-700', 'text-green-200');
+                messageBox.classList.add('bg-red-800', 'border-red-700', 'text-red-200');
+            } else {
+                // Otherwise, we use a green theme for success.
+                messageBox.classList.remove('bg-red-800', 'border-red-700', 'text-red-200');
+                messageBox.classList.add('bg-green-800', 'border-green-700', 'text-green-200');
+            }
+        };
+
+        // This function hides the message box.
+        const hideMessage = () => {
+            messageBox.classList.add('hidden');
+        };
+
+        // This function updates the counter number on the screen.
+        const updateCounter = async () => {
+            try {
+                // We call our mock contract to get the latest count.
+                const count = mockContractState.interactionCount();
+                interactionCountElement.textContent = count;
+            } catch (error) {
+                console.error("Failed to fetch interaction count:", error);
+                showMessage("Failed to fetch interaction count.", true);
+            }
+        };
+
+        // This is the main function that runs when the button is clicked.
+        interactButton.addEventListener('click', async () => {
+            // First, we hide any previous messages and disable the button.
+            hideMessage();
+            interactButton.disabled = true;
+            
+            // Then, we show the loading spinner and hide the message containers.
+            loadingIndicator.classList.remove('hidden');
+            gifContainer.classList.add('hidden');
+            protectedMessage.classList.add('hidden');
+
+            try {
+                // We simulate a blockchain transaction by waiting for a couple of seconds.
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // We call the 'interact' function in our mock contract.
+                mockContractState.interact();
+
+                // Once the transaction is "done", we update the counter.
+                await updateCounter();
+
+                // We add new logic to check if the protection threshold has been met.
+                const currentCount = mockContractState.interactionCount();
+                if (currentCount >= protectionThreshold) {
+                    // Show the protected message instead of the GIF
+                    protectedMessage.classList.remove('hidden');
+                } else {
+                    // Show the GIF as normal
+                    gifContainer.classList.remove('hidden');
+                }
+
+                // The message stays for a few seconds.
+                setTimeout(() => {
+                    gifContainer.classList.add('hidden');
+                    protectedMessage.classList.add('hidden');
+                }, 3000); // Messages stay for 3 seconds
+
+            } catch (error) {
+                // If something goes wrong, we'll display an error message.
+                console.error("Transaction failed:", error);
+                showMessage("Transaction failed. Please try again.", true);
+            } finally {
+                // Whether it succeeds or fails, we hide the loading spinner and re-enable the button.
+                loadingIndicator.classList.add('hidden');
+                interactButton.disabled = false;
+            }
+        });
+
+        // This makes sure the counter shows the initial value when the page first loads.
+        window.addEventListener('load', updateCounter);
+    </script>
+</body>
+</html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rick Roll DApp</title>
+    <!-- 
+        This is the link to Tailwind CSS, which we use for styling. 
+        It provides pre-made classes like "bg-lc-dark" and "p-8" to make the app look good without writing custom CSS. 
+    -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        // We are customizing the colors to match the Lightchain AI brand.
+        // This makes "lc-dark" and "lc-accent" available to use in our HTML classes.
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'lc-dark': '#1a1a1a', // A dark gray for the background
+                        'lc-accent': '#00FFFF', // A vibrant cyan for highlights
+                        'lc-light-gray': '#cccccc', // A light gray for text
+                    },
+                },
+            },
+        };
+    </script>
+    <style>
+        /* This line imports a nice, modern font called 'Inter' from Google Fonts. */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* This is a simple animation for the loading spinner. */
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: #00FFFF;
+            animation: spin 1s ease infinite;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="bg-lc-dark text-lc-light-gray min-h-screen flex items-center justify-center p-4">
+
+    <!-- This is the main card that holds all the content. -->
+    <div class="bg-gray-800 p-8 rounded-xl shadow-2xl max-w-lg w-full text-center border border-gray-700">
+        <h1 class="text-3xl font-bold mb-2 text-lc-accent">Rick Roll DApp</h1>
+        <p class="mb-6 text-gray-400">A simple dApp for a memorable interaction!</p>
+
+        <!-- This section displays the interaction counter. -->
+        <div class="mb-6">
+            <h2 class="text-xl font-semibold text-gray-200">Interactions</h2>
+            <!-- The ID "interactionCount" lets our JavaScript easily find and update this number. -->
+            <p id="interactionCount" class="text-4xl font-bold text-lc-accent mt-2 animate-pulse">0</p>
+        </div>
+
+        <!-- This is the button the user will click. -->
+        <button id="interactButton" class="bg-lc-accent hover:bg-opacity-90 text-gray-900 font-bold py-3 px-8 rounded-full shadow-lg transition-all duration-300 transform hover:scale-105 focus:outline-none focus:ring-4 focus:ring-lc-accent focus:ring-opacity-50">
+            Interact
+        </button>
+
+        <!-- This is a loading indicator that will show when a transaction is pending. It's hidden by default. -->
+        <div id="loading" class="mt-6 flex items-center justify-center space-x-2 hidden">
+            <div class="spinner"></div>
+            <p class="text-gray-400">Waiting for transaction...</p>
+        </div>
+
+        <!-- This container holds the Rick Roll GIF. It is also hidden by default. -->
+        <div id="gifContainer" class="mt-8 hidden overflow-hidden rounded-lg">
+            <!-- This is the URL for the gif. We'll show this when the button is clicked. -->
+            <img src="https://i.giphy.com/media/v1.Y2lkPTc5MGI3NjExZGcwem8zM2ZlcmZ1MWxweG9mZWRsZmFicnNocWgyc256dDczdmJjZiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/g7QTevVU0W4hpr9o8o/giphy.gif" alt="Rick Roll GIF" class="w-full h-auto object-cover">
+        </div>
+
+        <!-- New: This container holds the protected message. It's hidden by default. -->
+        <div id="protectedMessage" class="mt-8 hidden bg-blue-800 border border-blue-700 text-blue-200 p-4 rounded-lg shadow-inner">
+            <p class="text-lg font-semibold">Protected from the Rick Roll! 🎉</p>
+            <p class="mt-2 text-sm">The interaction count has reached a special threshold, so you are safe... for now.</p>
+        </div>
+
+        <!-- A custom message box for errors or success messages. It replaces the default browser "alert" function. -->
+        <div id="messageBox" class="mt-6 hidden bg-red-800 border border-red-700 text-red-200 p-4 rounded-lg shadow-inner">
+            <p id="messageText"></p>
+        </div>
+
+        <!-- The creator label you requested. -->
+        <p class="mt-8 text-sm text-gray-500">Created by <span class="font-semibold text-gray-400">Llihkor Productions</span></p>
+    </div>
+
+    <!-- The JavaScript section handles all the logic and interactivity. -->
+    <script>
+        // This is where a real dApp would connect to a wallet. We're using a fake ID for this demo.
+        const walletId = `0x${Math.random().toString(16).slice(2, 42)}`;
+        
+        // This is a placeholder for a real blockchain contract's ABI (Application Binary Interface).
+        // It tells the front end what functions exist in the contract.
+        const contractABI = [
+            {
+                "inputs": [],
+                "name": "interact",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "interactionCount",
+                "outputs": [
+                    {
+                        "internalType": "uint256",
+                        "name": "",
+                        "type": "uint256"
+                    }
+                ],
+                "stateMutability": "view",
+                "type": "function"
+            }
+        ];
+        
+        // We're creating a simple in-memory object to simulate the contract's behavior.
+        // In a real dApp, these functions would make calls to the blockchain.
+        let mockContractState = {
+            _count: 0,
+            interact: () => {
+                mockContractState._count++;
+                return true;
+            },
+            interactionCount: () => {
+                return mockContractState._count;
+            }
+        };
+
+        // We get references to the HTML elements so we can manipulate them with JavaScript.
+        const interactButton = document.getElementById('interactButton');
+        const interactionCountElement = document.getElementById('interactionCount');
+        const loadingIndicator = document.getElementById('loading');
+        const gifContainer = document.getElementById('gifContainer');
+        const protectedMessage = document.getElementById('protectedMessage');
+        const messageBox = document.getElementById('messageBox');
+        const messageText = document.getElementById('messageText');
+
+        // This is the number of interactions that triggers the "protection" feature.
+        const protectionThreshold = 5;
+
+        // This function shows messages to the user in our custom box.
+        const showMessage = (text, isError = false) => {
+            messageText.textContent = text;
+            messageBox.classList.remove('hidden');
+            if (isError) {
+                // If it's an error, we style the box with a red theme.
+                messageBox.classList.remove('bg-green-800', 'border-green-700', 'text-green-200');
+                messageBox.classList.add('bg-red-800', 'border-red-700', 'text-red-200');
+            } else {
+                // Otherwise, we use a green theme for success.
+                messageBox.classList.remove('bg-red-800', 'border-red-700', 'text-red-200');
+                messageBox.classList.add('bg-green-800', 'border-green-700', 'text-green-200');
+            }
+        };
+
+        // This function hides the message box.
+        const hideMessage = () => {
+            messageBox.classList.add('hidden');
+        };
+
+        // This function updates the counter number on the screen.
+        const updateCounter = async () => {
+            try {
+                // We call our mock contract to get the latest count.
+                const count = mockContractState.interactionCount();
+                interactionCountElement.textContent = count;
+            } catch (error) {
+                console.error("Failed to fetch interaction count:", error);
+                showMessage("Failed to fetch interaction count.", true);
+            }
+        };
+
+        // This is the main function that runs when the button is clicked.
+        interactButton.addEventListener('click', async () => {
+            // First, we hide any previous messages and disable the button.
+            hideMessage();
+            interactButton.disabled = true;
+            
+            // Then, we show the loading spinner and hide the message containers.
+            loadingIndicator.classList.remove('hidden');
+            gifContainer.classList.add('hidden');
+            protectedMessage.classList.add('hidden');
+
+            try {
+                // We simulate a blockchain transaction by waiting for a couple of seconds.
+                await new Promise(resolve => setTimeout(resolve, 2000));
+                
+                // We call the 'interact' function in our mock contract.
+                mockContractState.interact();
+
+                // Once the transaction is "done", we update the counter.
+                await updateCounter();
+
+                // We add new logic to check if the protection threshold has been met.
+                const currentCount = mockContractState.interactionCount();
+                if (currentCount >= protectionThreshold) {
+                    // Show the protected message instead of the GIF
+                    protectedMessage.classList.remove('hidden');
+                } else {
+                    // Show the GIF as normal
+                    gifContainer.classList.remove('hidden');
+                }
+
+                // The message stays for a few seconds.
+                setTimeout(() => {
+                    gifContainer.classList.add('hidden');
+                    protectedMessage.classList.add('hidden');
+                }, 3000); // Messages stay for 3 seconds
+
+            } catch (error) {
+                // If something goes wrong, we'll display an error message.
+                console.error("Transaction failed:", error);
+                showMessage("Transaction failed. Please try again.", true);
+            } finally {
+                // Whether it succeeds or fails, we hide the loading spinner and re-enable the button.
+                loadingIndicator.classList.add('hidden');
+                interactButton.disabled = false;
+            }
+        });
+
+        // This makes sure the counter shows the initial value when the page first loads.
+        window.addEventListener('load', updateCounter);
+    </script>
+</body>
+</html>
